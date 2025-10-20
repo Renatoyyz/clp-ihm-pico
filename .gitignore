@@ -1,0 +1,135 @@
+# 🥧 CLP-IHM-PICO - .gitignore
+# ================================
+
+# 🐍 Python
+# ----------
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# 🌐 Ambiente Virtual
+# -------------------
+.venv/
+venv/
+ENV/
+env/
+.env
+
+# 🔧 IDEs e Editores
+# ------------------
+.vscode/settings.json
+.vscode/launch.json
+.vscode/tasks.json
+.vscode/.ropeproject
+.idea/
+*.swp
+*.swo
+*~
+
+# 📱 MicroPython / Raspberry Pi Pico
+# ----------------------------------
+.micropico
+.picowgo
+*.pyc
+
+# 🗂️ Sistema Operacional
+# -----------------------
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+Icon
+._*
+.DocumentRevisions-V100
+.fseventsd
+.Spotlight-V100
+.TemporaryItems
+.Trashes
+.VolumeIcon.icns
+.com.apple.timemachine.donotpresent
+
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+*.cab
+*.msi
+*.msix
+*.msm
+*.msp
+*.lnk
+
+# Linux
+*~
+.nfs*
+
+# 📊 Logs e Dados Temporários
+# ---------------------------
+*.log
+*.tmp
+*.temp
+logs/
+temp/
+
+# 🔒 Arquivos de Configuração Locais
+# ----------------------------------
+config.local.json
+*.local
+.env.local
+
+# 📦 Dependências Node.js (caso use)
+# ----------------------------------
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# 🏗️ Build e Compilação
+# ----------------------
+*.o
+*.exe
+*.dll
+*.so
+*.dylib
+
+# 📋 Arquivos de Teste Temporários
+# --------------------------------
+test_output/
+*.test
+coverage.xml
+.coverage
+.pytest_cache/
+.tox/
+
+# 📚 Documentação Gerada
+# ----------------------
+docs/_build/
+site/
+
+# 🔐 Chaves e Certificados
+# ------------------------
+*.pem
+*.key
+*.crt
+*.p12
+secrets.json
