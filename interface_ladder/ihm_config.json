@@ -1,0 +1,46 @@
+{
+  "version": "1.0",
+  "screens": [
+    {
+      "name": "Tela Principal",
+      "id": 1,
+      "properties": {
+        "background_color": "light_green",
+        "timeout": 0,
+        "next_screen": 0,
+        "show_header": false,
+        "header_text": "",
+        "show_footer": false,
+        "footer_text": ""
+      },
+      "components": [
+        {
+          "type": "text",
+          "name": "text_1",
+          "x": 2,
+          "y": 1,
+          "width": 40,
+          "height": 8,
+          "properties": {
+            "text": "renato",
+            "font_size": 8
+          }
+        },
+        {
+          "type": "indicator",
+          "name": "indicator_2",
+          "x": 103,
+          "y": 4,
+          "width": 8,
+          "height": 8,
+          "properties": {
+            "state": true,
+            "variable": ""
+          }
+        }
+      ]
+    }
+  ],
+  "current_screen_index": 0,
+  "total_screens": 1
+}
