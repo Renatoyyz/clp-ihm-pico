@@ -1,53 +1,41 @@
-# Raspberry Pi Pico File Uploader
+# CLP-IHM-PICO - Sistema LADDER para Raspberry Pi Pico
 
-Uma coleção de aplicações para conectar e fazer upload de arquivos para Raspberry Pi Pico (Pico, Pico W, Pico 2, Pico 2 W), similar à funcionalidade da extensão VS Code para Pico.
+Sistema completo de desenvolvimento para Raspberry Pi Pico com **Interface LADDER Visual** e ferramentas de upload/comunicação.
 
-## 🚀 Funcionalidades
+## 🎯 Funcionalidades Principais
 
-- ✅ **Conecta automaticamente** ao Raspberry Pi Pico via serial
+### 🖥️ **Interface LADDER Visual (Nova!)**
+- ✅ **Interface gráfica PyQt5** profissional
+- ✅ **Conexão avançada com Pico** (detecção automática)
+- ✅ **Monitor em tempo real** da comunicação
+- ✅ **Console interativo** com comandos de teste
+- ✅ **Layout responsivo** com painéis redimensionáveis
+- 🔲 **Editor visual LADDER** (próxima fase)
+
+### � **Terminal Uploader (Estável)**
 - ✅ **Upload de arquivos Python** (.py) para o Pico
-- ✅ **Lista arquivos** no sistema de arquivos do Pico
-- ✅ **Executa scripts** diretamente no Pico
-- ✅ **Reset remoto** do Pico
-- ✅ **Interface gráfica** com PyQt5 (quando disponível)
-- ✅ **Interface de terminal** (sempre funciona)
-- ✅ **Log em tempo real** das operações
+- ✅ **Execução automática** após upload
+- ✅ **Reset remoto** do Pico (soft/hard)
+- ✅ **Lista arquivos** no Pico
 - ✅ **Compatível** com Pico, Pico W, Pico 2 e Pico 2 W
-- ✅ **Base para sistema LADDER** futuro
+- ✅ **Funciona sem dependências** (modo simulação)
 
-## 📋 Pré-requisitos
+## 🚀 Como Executar
 
-1. **Python 3.7+** instalado no sistema
-2. **Raspberry Pi Pico** com **MicroPython** instalado
-3. **Cabo USB** para conectar o Pico ao computador
-
-### Verificar se o MicroPython está instalado no Pico
-
-1. Conecte o Pico segurando o botão BOOTSEL
-2. Arraste o arquivo `pico_micropython.uf2` para o drive que aparece
-3. O Pico reiniciará automaticamente com MicroPython
-
-## 🛠️ Instalação
-
-### Opção 1: Uso Imediato (SEM instalação)
-
+### Interface LADDER (Recomendado)
 ```bash
-# Funciona AGORA - sem dependências
-python3 universal_uploader.py
-```
-
-### Opção 2: Ambiente Virtual (Recomendado)
-
-```bash
-# Criar ambiente virtual
-python3 -m venv .venv
+# Ativar ambiente virtual
 source .venv/bin/activate
 
-# Tentar instalar dependências
-pip install pyserial PyQt5
+# Executar interface gráfica
+cd interface_ladder
+python3 app.py
+```
 
-# Se falhar por SSL, use universal_uploader.py
-python universal_uploader.py
+### Terminal Uploader (Alternativo)
+```bash
+# Funciona sem dependências
+python3 main.py
 ```
 
 ### Opção 3: Instalação Completa
@@ -61,55 +49,88 @@ pip3 install pyserial PyQt5
 ./setup_venv.sh
 ```
 
-## 🎮 Como Usar
-
-### 1. Executar a Aplicação
-
-#### 🥇 Versão Universal (SEMPRE funciona)
-```bash
-python3 universal_uploader.py
-```
-
-#### Outras Versões
-```bash
-# Terminal básico
-python3 terminal_uploader.py
-
-# Interface gráfica (requer PyQt5)
-python3 simple_pico_uploader.py
-```
-
-### 2. Conectar ao Pico
-
-1. Conecte o Raspberry Pi Pico via USB
-2. Na aplicação, clique em **"Atualizar"** para listar portas
-3. Selecione a porta do Pico na lista
-4. Clique em **"Conectar"**
-
-### 3. Upload de Arquivos
-
-1. Clique em **"Selecionar Arquivo .py"**
-2. Escolha o arquivo Python que deseja enviar
-3. Clique em **"Upload para Pico"**
-4. Aguarde a confirmação no log
-
-### 4. Funcionalidades Adicionais
-
-- **Listar Arquivos**: Vê todos os arquivos no Pico
-- **Executar main.py**: Executa o arquivo principal
-- **Reset Pico**: Reinicia o microcontrolador
-
 ## 📁 Estrutura do Projeto
 
 ```
 clp-ihm-pico/
-├── terminal_uploader.py         # 🥇 Versão terminal (RECOMENDADA)
-├── simple_pico_uploader.py      # Interface PyQt5 simples
-├── pico_uploader.py            # Interface PyQt5 completa
-├── ladder_example.py           # Exemplo de lógica LADDER
-├── ladder_editor_concept.py    # Conceito do editor LADDER
-├── blink.py                    # Código de exemplo para teste
-├── requirements.txt            # Dependências Python
+├── 🖥️ interface_ladder/        # Interface LADDER Visual (Nova!)
+│   ├── app.py                 # Aplicação principal
+│   ├── main_window.py         # Janela principal
+│   ├── config_dialog.py       # Configuração do Pico (FUNCIONAL)
+│   ├── run.py                 # Script de inicialização
+│   └── README.md              # Documentação da interface
+│
+├── 🔧 src/                    # Código principal estável
+│   └── universal_uploader.py  # Terminal uploader universal
+│
+├── 🧪 tests/                  # Testes e utilitários
+│   ├── test_dependencies.py   # Teste de dependências
+│   └── ...
+│
+├── 📚 legacy/                 # Versões anteriores
+│   ├── terminal_uploader.py   # Terminal básico
+│   ├── simple_pico_uploader.py # PyQt5 simples
+│   └── ...
+│
+├── 🥧 pico_examples/          # Exemplos para Pico
+│   ├── blink_led.py          # LED piscante
+│   ├── ladder_example.py     # Exemplo LADDER
+│   └── ...
+│
+├── 📖 docs/                   # Documentação
+├── 🛠️ scripts/               # Scripts auxiliares
+├── main.py                   # Entry point principal
+├── test_dependencies.py     # Teste rápido
+└── README.md                 # Este arquivo
+```
+
+## 🎮 Como Usar
+
+### 🖥️ **Interface LADDER (Recomendado)**
+
+```bash
+# 1. Ativar ambiente virtual
+source .venv/bin/activate
+
+# 2. Executar interface
+cd interface_ladder
+python3 app.py
+```
+
+**Funcionalidades disponíveis:**
+- ✅ **Conexão avançada**: Menu Configurações → Conexão Pico
+- ✅ **Detecção automática** de Raspberry Pi Pico
+- ✅ **Monitor em tempo real** da comunicação
+- ✅ **Comandos de teste** pré-definidos
+- ✅ **Console interativo** para comandos personalizados
+
+### 🔧 **Terminal Uploader (Backup)**
+
+```bash
+# Funciona sem dependências
+python3 main.py
+```
+
+### 2. **Conectar ao Pico**
+
+#### Interface LADDER:
+1. Menu **"Configurações"** → **"Conexão Pico"**
+2. Aguarde detecção automática (ícone 🥧 aparece nos Picos)
+3. Clique **"Conectar"** ou ative **"Conectar automaticamente"**
+
+#### Terminal:
+1. Escolha opção **"2"** (Conectar ao Pico)
+2. Selecione a porta na lista
+3. Conexão estabelecida automaticamente
+
+### 3. **Upload e Execução**
+
+```bash
+# No terminal uploader
+Opção 3R: Upload + Executar arquivo
+```
+
+**Interface LADDER** (próxima fase): Editor visual de arrastar e soltar
 ├── install.sh                  # Script de instalação
 └── README.md                   # Este arquivo
 ```
