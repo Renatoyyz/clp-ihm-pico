@@ -8,11 +8,16 @@
     "flow_control": "None"
   },
   "rs485_config": {
-    "enable_pin": 0,
+    "auto_flow_control": true,
     "mode": "Master",
     "device_address": 1,
     "timeout": 1000,
     "max_retries": 3
+  },
+  "converter_info": {
+    "type": "Auto Flow Control",
+    "model": "RS232 to RS485 Converter",
+    "description": "M\u00f3dulo conversor com controle DE/RE autom\u00e1tico"
   },
   "network_config": {
     "protocol": "Modbus RTU",

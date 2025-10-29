@@ -37,11 +37,16 @@ class RS485ConfigDialog(QDialog):
                 'flow_control': 'None'
             },
             'rs485_config': {
-                'enable_pin': 2,
+                'auto_flow_control': True,  # Módulo com controle automático
                 'mode': 'Master',
                 'device_address': 1,
                 'timeout': 1000,
                 'max_retries': 3
+            },
+            'converter_info': {
+                'type': 'Auto Flow Control',
+                'model': 'RS232 to RS485 Converter',
+                'description': 'Módulo conversor com controle DE/RE automático'
             },
             'network_config': {
                 'protocol': 'Modbus RTU',
@@ -181,10 +186,10 @@ class RS485ConfigDialog(QDialog):
         info_layout = QVBoxLayout(info_group)
         
         info_text = QLabel("""
-        🔌 <b>Conexão Física:</b><br>
+        🔌 <b>Conexão Física - Módulo com Controle Automático:</b><br>
         • Pico TX → Módulo RS485 DI (Data Input)<br>
         • Pico RX → Módulo RS485 RO (Receiver Output)<br>
-        • Pico GPIO → Módulo RS485 DE/RE (Enable)<br><br>
+        • <span style="color: green;">✅ Controle DE/RE: Automático (não precisa conectar)</span><br><br>
         
         ⚡ <b>Alimentação:</b><br>
         • VCC: 3.3V ou 5V (conforme módulo)<br>
@@ -193,7 +198,12 @@ class RS485ConfigDialog(QDialog):
         🌐 <b>Rede RS485:</b><br>
         • A+: Linha diferencial positiva<br>
         • B-: Linha diferencial negativa<br>
-        • Máximo 32 dispositivos por rede
+        • Máximo 32 dispositivos por rede<br><br>
+        
+        🎯 <b>Vantagem do Controle Automático:</b><br>
+        • Simplifica conexão (apenas TX/RX)<br>
+        • Não ocupa GPIO adicional do Pico<br>
+        • Comutação automática TX/RX
         """)
         info_text.setWordWrap(True)
         info_text.setStyleSheet("padding: 10px; background-color: #f0f8ff; border-radius: 5px;")
@@ -209,15 +219,30 @@ class RS485ConfigDialog(QDialog):
         widget = QWidget()
         layout = QVBoxLayout(widget)
         
+        # Grupo Conversor RS485
+        converter_group = QGroupBox("🔄 Módulo Conversor RS232 → RS485")
+        converter_layout = QFormLayout(converter_group)
+        
+        # Tipo de conversor
+        self.converter_type_label = QLabel("Controle DE/RE Automático")
+        self.converter_type_label.setStyleSheet("color: green; font-weight: bold;")
+        converter_layout.addRow("Tipo:", self.converter_type_label)
+        
+        # Status do controle automático
+        self.auto_control_status = QLabel("✅ Ativo - Não requer GPIO adicional")
+        self.auto_control_status.setStyleSheet("color: green;")
+        converter_layout.addRow("Controle Fluxo:", self.auto_control_status)
+        
+        # Informação sobre simplificação
+        info_label = QLabel("💡 Conexão simplificada: apenas TX e RX necessários")
+        info_label.setStyleSheet("color: #0066cc; font-style: italic; padding: 5px;")
+        converter_layout.addRow("", info_label)
+        
+        layout.addWidget(converter_group)
+        
         # Grupo RS485
         rs485_group = QGroupBox("🌐 Configuração RS485")
         rs485_layout = QFormLayout(rs485_group)
-        
-        # Pino de habilitação
-        self.enable_pin_spin = QSpinBox()
-        self.enable_pin_spin.setRange(0, 29)
-        self.enable_pin_spin.setValue(2)
-        rs485_layout.addRow("Pino DE/RE (Enable):", self.enable_pin_spin)
         
         # Modo
         self.mode_combo = QComboBox()
@@ -254,6 +279,55 @@ class RS485ConfigDialog(QDialog):
         protocol_layout.addRow("Protocolo:", self.protocol_combo)
         
         layout.addWidget(protocol_group)
+        
+        # Grupo Diagrama de Conexão
+        diagram_group = QGroupBox("📐 Diagrama de Conexão Simplificada")
+        diagram_layout = QVBoxLayout(diagram_group)
+        
+        diagram_text = QLabel("""
+        <table border="1" style="border-collapse: collapse; width: 100%;">
+        <tr style="background-color: #e3f2fd;">
+            <th style="padding: 8px;">Raspberry Pi Pico</th>
+            <th style="padding: 8px;">→</th>
+            <th style="padding: 8px;">Módulo RS485</th>
+            <th style="padding: 8px;">Função</th>
+        </tr>
+        <tr>
+            <td style="padding: 8px; text-align: center;"><b>TX (GP0 ou GP4)</b></td>
+            <td style="padding: 8px; text-align: center;">→</td>
+            <td style="padding: 8px; text-align: center;"><b>DI</b></td>
+            <td style="padding: 8px;">Transmissão de dados</td>
+        </tr>
+        <tr style="background-color: #f5f5f5;">
+            <td style="padding: 8px; text-align: center;"><b>RX (GP1 ou GP5)</b></td>
+            <td style="padding: 8px; text-align: center;">←</td>
+            <td style="padding: 8px; text-align: center;"><b>RO</b></td>
+            <td style="padding: 8px;">Recepção de dados</td>
+        </tr>
+        <tr>
+            <td style="padding: 8px; text-align: center;"><b>3V3</b></td>
+            <td style="padding: 8px; text-align: center;">→</td>
+            <td style="padding: 8px; text-align: center;"><b>VCC</b></td>
+            <td style="padding: 8px;">Alimentação (3.3V)</td>
+        </tr>
+        <tr style="background-color: #f5f5f5;">
+            <td style="padding: 8px; text-align: center;"><b>GND</b></td>
+            <td style="padding: 8px; text-align: center;">→</td>
+            <td style="padding: 8px; text-align: center;"><b>GND</b></td>
+            <td style="padding: 8px;">Terra comum</td>
+        </tr>
+        <tr style="background-color: #e8f5e8;">
+            <td style="padding: 8px; text-align: center;"><b>-</b></td>
+            <td style="padding: 8px; text-align: center;">-</td>
+            <td style="padding: 8px; text-align: center;"><b>DE/RE</b></td>
+            <td style="padding: 8px;"><b>🎯 Controle Automático</b></td>
+        </tr>
+        </table>
+        """)
+        diagram_text.setWordWrap(True)
+        diagram_layout.addWidget(diagram_text)
+        
+        layout.addWidget(diagram_group)
         
         # Área de teste
         test_group = QGroupBox("🧪 Teste de Comunicação")
@@ -323,7 +397,7 @@ class RS485ConfigDialog(QDialog):
         example_layout = QVBoxLayout(example_group)
         
         example_text = QLabel("""
-        <b>Configuração típica para rede Modbus RTU:</b><br><br>
+        <b>Configuração Simplificada para Módulo com Controle Automático:</b><br><br>
         
         🏭 <b>Cenário Industrial:</b><br>
         • Endereço 1: CLP Principal (Master)<br>
@@ -335,7 +409,13 @@ class RS485ConfigDialog(QDialog):
         • Baudrate: 9600 bps<br>
         • Data: 8 bits, Stop: 1 bit, Paridade: None<br>
         • Timeout: 1000 ms<br>
-        • Tentativas: 3x
+        • Tentativas: 3x<br><br>
+        
+        🎯 <b>Vantagens do Módulo com Controle Automático:</b><br>
+        • ✅ Conexão simplificada (apenas TX/RX)<br>
+        • ✅ Não consome GPIO para controle DE/RE<br>
+        • ✅ Comutação automática transmissão/recepção<br>
+        • ✅ Menor chance de erro de temporização
         """)
         example_text.setWordWrap(True)
         example_text.setStyleSheet("padding: 10px; background-color: #fff8e1; border-radius: 5px;")
@@ -436,8 +516,7 @@ class RS485ConfigDialog(QDialog):
         self.parity_combo.setCurrentText(serial_config['parity'])
         self.flow_control_combo.setCurrentText(serial_config['flow_control'])
         
-        # RS485
-        self.enable_pin_spin.setValue(rs485_config['enable_pin'])
+        # RS485 (sem pino DE/RE)
         self.mode_combo.setCurrentText(rs485_config['mode'])
         self.device_address_spin.setValue(rs485_config['device_address'])
         self.timeout_spin.setValue(rs485_config['timeout'])
@@ -462,7 +541,7 @@ class RS485ConfigDialog(QDialog):
         }
         
         self.config_data['rs485_config'] = {
-            'enable_pin': self.enable_pin_spin.value(),
+            'auto_flow_control': True,  # Módulo com controle automático
             'mode': self.mode_combo.currentText(),
             'device_address': self.device_address_spin.value(),
             'timeout': self.timeout_spin.value(),
