@@ -17,13 +17,15 @@ from PyQt5.QtWidgets import (
 from PyQt5.QtCore import Qt, QTimer, pyqtSignal, QThread, pyqtSlot
 from PyQt5.QtGui import QFont, QColor, QPalette
 
-# Importar suporte para comunicação serial
+# Importar gerenciador de conexão
+from pico_connection_manager import pico_manager, SERIAL_AVAILABLE
+
+# Importar suporte para comunicação serial (para detecção de portas)
 try:
     import serial
     import serial.tools.list_ports
-    SERIAL_AVAILABLE = True
 except ImportError:
-    SERIAL_AVAILABLE = False
+    pass
 
 
 class PortScannerThread(QThread):
@@ -165,6 +167,10 @@ class ConfigDialog(QDialog):
         self.connection_thread = None
         self.current_connection = None
         self.init_ui()
+        
+        # Verificar se já existe conexão ativa
+        self.check_existing_connection()
+        
         self.start_port_scanner()
         
     def init_ui(self):
@@ -414,6 +420,26 @@ class ConfigDialog(QDialog):
                 background-color: #cce7ff;
             }
         """)
+    
+    def check_existing_connection(self):
+        """Verifica se já existe uma conexão ativa com o Pico"""
+        if pico_manager.is_connected():
+            port = pico_manager.get_port()
+            self.connection_status.setText("🟢 Já Conectado")
+            self.connection_details.setText(f"Conexão ativa em {port}")
+            self.connect_btn.setEnabled(False)
+            self.disconnect_btn.setEnabled(True)
+            
+            # Adicionar ao output
+            if hasattr(self, 'pico_output'):
+                self.pico_output.append(f"\n🟢 Conexão existente detectada em {port}\n")
+            
+            self.log_message.emit(f"✅ Conexão existente detectada em {port}")
+        else:
+            self.connection_status.setText("🔴 Desconectado")
+            self.connection_details.setText("Aguardando conexão...")
+            self.connect_btn.setEnabled(True)
+            self.disconnect_btn.setEnabled(False)
         
     def start_port_scanner(self):
         """Inicia escaneamento de portas"""
@@ -469,7 +495,7 @@ class ConfigDialog(QDialog):
         self.detection_status.setText("🔍 Atualizando...")
         
     def connect_to_pico(self):
-        """Conecta ao Pico"""
+        """Conecta ao Pico usando o gerenciador global"""
         port = self.port_combo.currentText()
         if not port:
             QMessageBox.warning(self, "Erro", "Selecione uma porta para conectar")
@@ -481,11 +507,31 @@ class ConfigDialog(QDialog):
         self.connection_details.setText(f"Tentando conectar em {port}...")
         self.connect_btn.setEnabled(False)
         
-        # Criar thread de conexão
-        self.connection_thread = PicoConnectionThread(port, baudrate)
-        self.connection_thread.connection_result.connect(self.on_connection_result)
-        self.connection_thread.output_received.connect(self.on_output_received)
-        self.connection_thread.start()
+        # Usar gerenciador de conexão
+        success, message = pico_manager.connect(port, baudrate)
+        
+        if success:
+            self.connection_status.setText("🟢 Conectado")
+            self.connection_details.setText(message)
+            self.connect_btn.setEnabled(False)
+            self.disconnect_btn.setEnabled(True)
+            
+            # Emitir sinal para janela principal
+            self.connection_changed.emit(True, port)
+            self.log_message.emit(message)
+            
+            # Adicionar ao output
+            self.pico_output.append(f"\n{message}\n")
+        else:
+            self.connection_status.setText("🔴 Falha na Conexão")
+            self.connection_details.setText(message)
+            self.connect_btn.setEnabled(True)
+            self.disconnect_btn.setEnabled(False)
+            
+            # Emitir sinal de erro
+            self.log_message.emit(message)
+            
+            QMessageBox.warning(self, "Erro de Conexão", message)
         
     @pyqtSlot(bool, str, str)
     def on_connection_result(self, success, port, message):
@@ -525,26 +571,34 @@ class ConfigDialog(QDialog):
             self.pico_output.setTextCursor(cursor)
             
     def disconnect_from_pico(self):
-        """Desconecta do Pico"""
-        if self.current_connection:
-            self.current_connection.disconnect()
-            self.current_connection = None
-            
+        """Desconecta do Pico usando o gerenciador global"""
+        success, message = pico_manager.disconnect()
+        
         self.connection_status.setText("🔴 Desconectado")
-        self.connection_details.setText("Conexão encerrada pelo usuário")
+        self.connection_details.setText(message)
         self.connect_btn.setEnabled(True)
         self.disconnect_btn.setEnabled(False)
         
+        # Emitir sinal para janela principal
         self.connection_changed.emit(False, "")
-        self.log_message.emit("Desconectado do Pico")
-        self.pico_output.append("🔴 DESCONECTADO")
+        self.log_message.emit(message)
+        
+        # Adicionar ao output
+        self.pico_output.append(f"\n{message}\n")
         
     def send_test_command(self, command):
-        """Envia comando de teste"""
-        if self.current_connection:
-            self.pico_output.append(f"📤 COMANDO: {command}")
-            self.current_connection.send_command(command)
+        """Envia comando de teste usando o gerenciador global"""
+        if not pico_manager.is_connected():
+            self.pico_output.append("❌ Não conectado!")
+            return
+            
+        self.pico_output.append(f"\n� COMANDO: {command}")
+        success, response = pico_manager.send_command(command)
+        
+        if success:
+            self.pico_output.append(f"� RESPOSTA:\n{response}")
         else:
+            self.pico_output.append(f"❌ ERRO: {response}")
             QMessageBox.warning(self, "Erro", "Não há conexão ativa com o Pico")
             
     def send_custom_command(self):

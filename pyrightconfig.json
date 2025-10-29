@@ -1,0 +1,24 @@
+{
+  "include": [
+    "interface_ladder"
+  ],
+  "exclude": [
+    "**/node_modules",
+    "**/__pycache__",
+    ".git",
+    ".venv"
+  ],
+  "reportAttributeAccessIssue": "none",
+  "reportGeneralTypeIssues": "none",
+  "reportOptionalMemberAccess": "none",
+  "reportOptionalSubscript": "none",
+  "reportOptionalIterable": "none",
+  "reportOptionalContextManager": "none",
+  "reportOptionalOperand": "none",
+  "reportTypedDictNotRequiredAccess": "none",
+  "pythonVersion": "3.10",
+  "pythonPlatform": "Darwin",
+  "stubPath": "",
+  "venvPath": ".",
+  "venv": ".venv"
+}

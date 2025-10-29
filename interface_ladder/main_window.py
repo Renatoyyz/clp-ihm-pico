@@ -3,6 +3,8 @@ Janela Principal da Interface LADDER
 Interface para programação LADDER do Raspberry Pi Pico
 """
 
+import os
+import json
 from PyQt5.QtWidgets import (QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, 
                            QSplitter, QTabWidget, QTextEdit, QLabel, QMenuBar,
                            QAction, QMessageBox, QFileDialog, QStatusBar,
@@ -14,6 +16,8 @@ from PyQt5.QtGui import QKeySequence, QIcon, QPixmap, QPainter, QColor, QFont
 from component_library import ComponentLibrary
 from ladder_canvas import LadderCanvas
 from config_dialog import ConfigDialog
+from code_generator import PicoCodeGenerator
+from pico_connection_manager import pico_manager
 
 class MainWindow(QMainWindow):
     """Janela principal da aplicação"""
@@ -341,6 +345,14 @@ class MainWindow(QMainWindow):
         rs485_action.triggered.connect(self.configure_rs485)
         pico_menu.addAction(rs485_action)
         
+        pico_menu.addSeparator()
+        
+        # Test Upload (Debug)
+        test_upload_action = QAction('🧪 Test Upload (Debug)', self)
+        test_upload_action.setStatusTip('Testar upload com arquivo pequeno e logs detalhados')
+        test_upload_action.triggered.connect(self.test_upload)
+        pico_menu.addAction(test_upload_action)
+        
         # Menu Ajuda
         help_menu = menubar.addMenu('❓ &Ajuda')
         
@@ -466,7 +478,90 @@ class MainWindow(QMainWindow):
             
     def export_python(self):
         """Exportar para código Python"""
-        self.log_message("🐍 Exportando para Python...")
+        self.log_message("🐍 Iniciando geração de código Python para Raspberry Pi Pico...")
+        
+        try:
+            # Criar gerador
+            generator = PicoCodeGenerator()
+            
+            # Coletar componentes LADDER
+            ladder_components = []
+            connections = []
+            
+            # Verificar se existe canvas LADDER
+            if hasattr(self, 'ladder_canvas'):
+                # Obter componentes do canvas
+                for item in self.ladder_canvas.scene.items():
+                    if hasattr(item, 'component_name'):
+                        component_data = {
+                            'name': item.component_name,
+                            'type': getattr(item, 'component_type', 'unknown'),
+                            'position': (item.pos().x(), item.pos().y()),
+                            'properties': getattr(item, 'properties', {})
+                        }
+                        ladder_components.append(component_data)
+                
+                # Obter conexões
+                if hasattr(self.ladder_canvas, 'connections'):
+                    for conn in self.ladder_canvas.connections:
+                        if hasattr(conn, 'start_component') and hasattr(conn, 'end_component'):
+                            connection_data = {
+                                'from': conn.start_component.component_name if hasattr(conn.start_component, 'component_name') else 'unknown',
+                                'to': conn.end_component.component_name if hasattr(conn.end_component, 'component_name') else 'unknown',
+                                'from_point': getattr(conn, 'start_point_type', 'output'),
+                                'to_point': getattr(conn, 'end_point_type', 'input')
+                            }
+                            connections.append(connection_data)
+            
+            # Carregar configuração RS485
+            rs485_config = self.load_rs485_config()
+            
+            # Configuração IHM (placeholder por enquanto)
+            ihm_config = {}
+            
+            # Gerar código
+            success = generator.generate_all(
+                ladder_components, 
+                connections, 
+                rs485_config, 
+                ihm_config
+            )
+            
+            if success:
+                self.log_message("✅ Código Python gerado com sucesso!")
+                self.log_message(f"📁 Arquivos salvos em: {generator.output_dir}")
+                
+                # Mostrar diálogo de sucesso
+                msg = QMessageBox()
+                msg.setIcon(QMessageBox.Information)
+                msg.setWindowTitle("Geração Concluída")
+                msg.setText("Código Python gerado com sucesso!")
+                msg.setInformativeText(f"Arquivos salvos em:\n{generator.output_dir}\n\n" +
+                                      "Arquivos gerados:\n" +
+                                      "• main_.py - Código principal (renomear para main.py para produção)\n" +
+                                      "• lib_rs485.py - Biblioteca RS485 (Modbus RTU)\n" +
+                                      "• lib_ihm.py - Biblioteca IHM (Display ST7920)\n" +
+                                      "• config.json - Arquivo de configuração")
+                msg.setStandardButtons(QMessageBox.Ok)
+                msg.exec_()
+            else:
+                self.log_message("❌ Erro ao gerar código Python")
+                
+        except Exception as e:
+            self.log_message(f"❌ Erro na geração: {str(e)}")
+            import traceback
+            self.log_message(traceback.format_exc())
+            
+    def load_rs485_config(self):
+        """Carrega configuração RS485 do arquivo"""
+        try:
+            config_path = "rs485_config.json"
+            if os.path.exists(config_path):
+                with open(config_path, 'r') as f:
+                    return json.load(f)
+        except Exception as e:
+            self.log_message(f"⚠️ Não foi possível carregar config RS485: {e}")
+        return None
         
     def export_image(self):
         """Exportar diagrama como imagem"""
@@ -490,7 +585,257 @@ class MainWindow(QMainWindow):
         
     def upload_to_pico(self):
         """Enviar código para Pico"""
-        self.log_message("📤 Enviando código para Raspberry Pi Pico...")
+        self.log_message("📤 Iniciando upload para Raspberry Pi Pico...")
+        
+        # Verificar se está conectado
+        if not pico_manager.is_connected():
+            msg = QMessageBox()
+            msg.setIcon(QMessageBox.Warning)
+            msg.setWindowTitle("Pico Não Conectado")
+            msg.setText("Raspberry Pi Pico não está conectado!")
+            msg.setInformativeText("Deseja abrir o diálogo de conexão?")
+            msg.setStandardButtons(QMessageBox.Yes | QMessageBox.No)
+            
+            if msg.exec_() == QMessageBox.Yes:
+                self.connect_pico()
+            return
+        
+        # Verificar se o código foi gerado
+        main_file = os.path.join("../generated_code", "main_.py")
+        if not os.path.exists(main_file):
+            reply = QMessageBox.question(
+                self,
+                "Código Não Gerado",
+                "O código ainda não foi gerado.\n\nDeseja gerar o código agora?",
+                QMessageBox.Yes | QMessageBox.No
+            )
+            
+            if reply == QMessageBox.Yes:
+                self.export_python()
+                # Verificar novamente se foi gerado
+                if not os.path.exists(main_file):
+                    self.log_message("❌ Falha ao gerar código")
+                    return
+            else:
+                return
+        
+        # Perguntar quais arquivos enviar
+        msg = QMessageBox()
+        msg.setIcon(QMessageBox.Question)
+        msg.setWindowTitle("Upload para Pico")
+        msg.setText("Selecione os arquivos para enviar:")
+        msg.setInformativeText(
+            "• main_.py → main.py (código principal)\n"
+            "• lib_rs485.py (biblioteca RS485)\n"
+            "• lib_ihm.py (biblioteca IHM)\n"
+            "• config.json (configurações)"
+        )
+        
+        all_btn = msg.addButton("📦 Todos", QMessageBox.YesRole)
+        main_only_btn = msg.addButton("📄 Apenas main_.py", QMessageBox.NoRole)
+        cancel_btn = msg.addButton("❌ Cancelar", QMessageBox.RejectRole)
+        
+        msg.exec_()
+        clicked = msg.clickedButton()
+        
+        if clicked == cancel_btn:
+            self.log_message("⚠️ Upload cancelado")
+            return
+        
+        # Lista de arquivos para upload
+        files_to_upload = []
+        
+        if clicked == all_btn:
+            files_to_upload = [
+                ("../generated_code/main_.py", "main.py"),
+                ("../generated_code/lib_rs485.py", "lib_rs485.py"),
+                ("../generated_code/lib_ihm.py", "lib_ihm.py"),
+                ("../generated_code/config.json", "config.json")
+            ]
+        else:  # main_only_btn
+            files_to_upload = [
+                ("../generated_code/main_.py", "main.py")
+            ]
+        
+        # Executar upload
+        self.log_message(f"📤 Enviando {len(files_to_upload)} arquivo(s)...")
+        self.log_message("🔍 Modo debug ativado - mostrando detalhes...")
+        
+        success_count = 0
+        error_count = 0
+        
+        # Criar função de log personalizada que redireciona para a interface
+        import sys
+        from io import StringIO
+        
+        # Capturar stdout temporariamente
+        old_stdout = sys.stdout
+        sys.stdout = StringIO()
+        
+        try:
+            for local_path, remote_name in files_to_upload:
+                if not os.path.exists(local_path):
+                    self.log_message(f"⚠️ Arquivo não encontrado: {local_path}")
+                    error_count += 1
+                    continue
+                
+                self.log_message(f"\n📤 Enviando {remote_name}...")
+                
+                # Fazer upload com debug ativado
+                success, message = pico_manager.upload_file(local_path, remote_name, debug=True)
+                
+                # Capturar e mostrar logs de debug
+                debug_output = sys.stdout.getvalue()
+                if debug_output:
+                    for line in debug_output.strip().split('\n'):
+                        if line.strip():
+                            self.log_message(f"  {line}")
+                    sys.stdout = StringIO()  # Limpar buffer
+                
+                if success:
+                    self.log_message(f"✅ {message}")
+                    success_count += 1
+                else:
+                    self.log_message(f"❌ {message}")
+                    error_count += 1
+        finally:
+            # Restaurar stdout
+            sys.stdout = old_stdout
+        
+        # Mensagem final
+        if error_count == 0:
+            self.log_message(f"✅ Upload concluído! {success_count} arquivo(s) enviado(s)")
+            
+            # Perguntar se quer executar soft reset
+            reply = QMessageBox.question(
+                self,
+                "Upload Concluído",
+                f"Upload concluído com sucesso!\n\n"
+                f"{success_count} arquivo(s) enviado(s)\n\n"
+                "Deseja executar soft reset para reiniciar o Pico?",
+                QMessageBox.Yes | QMessageBox.No
+            )
+            
+            if reply == QMessageBox.Yes:
+                success, message = pico_manager.soft_reset()
+                self.log_message(message)
+        else:
+            self.log_message(f"⚠️ Upload finalizado com erros: {success_count} sucesso, {error_count} falhas")
+            QMessageBox.warning(
+                self,
+                "Upload com Erros",
+                f"Upload finalizado com erros:\n\n"
+                f"✅ Sucesso: {success_count}\n"
+                f"❌ Falhas: {error_count}\n\n"
+                "Verifique os logs para mais detalhes."
+            )
+    
+    def test_upload(self):
+        """Testar upload com arquivo pequeno"""
+        self.log_message("\n" + "="*60)
+        self.log_message("🧪 TESTE DE UPLOAD")
+        self.log_message("="*60)
+        
+        # Verificar conexão
+        self.log_message("\n1. Verificando conexão...")
+        if not pico_manager.is_connected():
+            self.log_message("❌ Pico não está conectado!")
+            QMessageBox.warning(
+                self,
+                "Pico Não Conectado",
+                "Conecte o Pico primeiro através do menu:\nPico → Conectar Pico"
+            )
+            return
+        
+        port = pico_manager.get_port()
+        self.log_message(f"✅ Conectado em: {port}")
+        
+        # Criar arquivo de teste
+        self.log_message("\n2. Criando arquivo de teste...")
+        import tempfile
+        test_content = """# Teste de Upload
+print('='*40)
+print('🎉 Upload funcionou!')
+print('Arquivo de teste executado com sucesso')
+print('='*40)
+"""
+        
+        test_file = tempfile.NamedTemporaryFile(mode='w', suffix='.py', delete=False)
+        test_file.write(test_content)
+        test_file.close()
+        
+        self.log_message(f"   Arquivo criado: {test_file.name}")
+        self.log_message(f"   Tamanho: {len(test_content)} bytes")
+        
+        # Fazer upload com debug
+        self.log_message("\n3. Iniciando upload (modo debug)...")
+        
+        import sys
+        from io import StringIO
+        
+        # Capturar stdout
+        old_stdout = sys.stdout
+        sys.stdout = StringIO()
+        
+        try:
+            success, message = pico_manager.upload_file(test_file.name, "test_upload.py", debug=True)
+            
+            # Capturar logs
+            debug_output = sys.stdout.getvalue()
+            if debug_output:
+                for line in debug_output.strip().split('\n'):
+                    if line.strip():
+                        self.log_message(f"  {line}")
+        finally:
+            sys.stdout = old_stdout
+            # Limpar arquivo temporário
+            try:
+                os.unlink(test_file.name)
+            except:
+                pass
+        
+        if success:
+            self.log_message(f"\n✅ {message}")
+            
+            # Tentar executar
+            self.log_message("\n4. Executando arquivo de teste no Pico...")
+            success, response = pico_manager.send_command("exec(open('test_upload.py').read())")
+            
+            if success:
+                self.log_message("📥 Resposta do Pico:")
+                for line in response.strip().split('\n'):
+                    if line.strip():
+                        self.log_message(f"   {line}")
+            
+            # Verificar arquivos
+            self.log_message("\n5. Listando arquivos no Pico...")
+            success, response = pico_manager.send_command("import os; print(os.listdir())")
+            if success:
+                self.log_message(f"   Arquivos: {response.strip()}")
+            
+            self.log_message("\n" + "="*60)
+            self.log_message("✅ TESTE CONCLUÍDO COM SUCESSO!")
+            self.log_message("="*60)
+            
+            QMessageBox.information(
+                self,
+                "Teste Concluído",
+                "✅ Upload funcionou!\n\n"
+                "O sistema está pronto para enviar o código principal.\n"
+                "Use: Pico → Upload para Pico"
+            )
+        else:
+            self.log_message(f"\n❌ {message}")
+            self.log_message("\n" + "="*60)
+            self.log_message("❌ TESTE FALHOU")
+            self.log_message("="*60)
+            
+            QMessageBox.warning(
+                self,
+                "Teste Falhou",
+                f"❌ Upload falhou!\n\n{message}\n\n"
+                "Verifique os logs para detalhes."
+            )
         
     def connect_pico(self):
         """Conectar com Pico"""

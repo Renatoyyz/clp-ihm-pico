@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
 """
 Canvas LADDER - Editor Visual
-Área de desenho para programação LADDER com drag & drop
+Área de desenho para programação LADDER com drag & drop e conexões
 """
 
 from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QFrame,
     QScrollArea, QGraphicsView, QGraphicsScene, QGraphicsItem,
-    QGraphicsProxyWidget, QMenu, QAction, QMessageBox
+    QGraphicsProxyWidget, QMenu, QAction, QMessageBox, QGraphicsLineItem
 )
 from PyQt5.QtCore import Qt, QPointF, QRectF, pyqtSignal, QMimeData
 from PyQt5.QtGui import (
@@ -15,8 +15,114 @@ from PyQt5.QtGui import (
     QDragMoveEvent, QDropEvent, QPalette
 )
 
+class LadderConnectionLine(QGraphicsItem):
+    """Conexão LADDER real (horizontal + vertical, sem diagonal)"""
+    
+    def __init__(self, start_point, end_point):
+        super().__init__()
+        
+        self.start_point = start_point
+        self.end_point = end_point
+        
+        # Calcular pontos da conexão em L (horizontal + vertical)
+        self.connection_points = self.calculate_ladder_path()
+        
+        # Estilo da linha LADDER
+        self.setFlag(QGraphicsItem.ItemIsSelectable, True)
+        self.setZValue(100)  # Acima do grid, abaixo dos componentes
+        
+    def calculate_ladder_path(self):
+        """Calcula caminho em L da conexão LADDER"""
+        start = self.start_point
+        end = self.end_point
+        
+        # Conexão LADDER padrão: horizontal primeiro, depois vertical
+        # Ponto intermediário para fazer o "L"
+        intermediate = QPointF(end.x(), start.y())
+        
+        return [start, intermediate, end]
+        
+    def boundingRect(self):
+        """Retorna retângulo delimitador da conexão"""
+        points = self.connection_points
+        if not points:
+            return QRectF()
+            
+        # Encontrar limites
+        min_x = min(p.x() for p in points)
+        max_x = max(p.x() for p in points)
+        min_y = min(p.y() for p in points)
+        max_y = max(p.y() for p in points)
+        
+        # Adicionar margem para espessura da linha
+        margin = 5
+        return QRectF(min_x - margin, min_y - margin, 
+                     max_x - min_x + 2*margin, max_y - min_y + 2*margin)
+        
+    def paint(self, painter, option, widget):
+        """Desenha a conexão LADDER em formato L"""
+        painter.setRenderHint(QPainter.Antialiasing)
+        
+        # Cor baseada na seleção
+        if self.isSelected():
+            pen = QPen(QColor(0, 120, 212), 4)  # Azul quando selecionada
+        else:
+            pen = QPen(QColor(0, 0, 0), 3)      # Preta normal
+            
+        painter.setPen(pen)
+        
+        # Desenhar linhas do caminho em L
+        points = self.connection_points
+        for i in range(len(points) - 1):
+            start = points[i]
+            end = points[i + 1]
+            painter.drawLine(start, end)
+        
+        # Desenhar pontos de conexão nas extremidades
+        painter.setBrush(QBrush(QColor(0, 0, 0)))
+        start = points[0]
+        end = points[-1]
+        
+        # Pontos pequenos nas extremidades
+        painter.drawEllipse(int(start.x()) - 2, int(start.y()) - 2, 4, 4)
+        painter.drawEllipse(int(end.x()) - 2, int(end.y()) - 2, 4, 4)
+        
+        # Ponto de junção no meio (opcional)
+        if len(points) > 2:
+            junction = points[1]
+            painter.drawEllipse(int(junction.x()) - 1, int(junction.y()) - 1, 2, 2)
+    
+    def update_path(self, start_point, end_point):
+        """Atualiza o caminho da conexão"""
+        self.start_point = start_point
+        self.end_point = end_point
+        self.connection_points = self.calculate_ladder_path()
+        self.update()
+        
+    def contextMenuEvent(self, event):
+        """Menu de contexto para conexão"""
+        from PyQt5.QtWidgets import QMenu, QAction
+        menu = QMenu()
+        
+        delete_action = QAction("🗑️ Excluir Conexão", menu)
+        delete_action.triggered.connect(self.delete_connection)
+        menu.addAction(delete_action)
+        
+        menu.exec_(event.screenPos())
+        
+    def delete_connection(self):
+        """Exclui esta conexão"""
+        # Encontrar o canvas pai e chamar método de exclusão
+        scene = self.scene()
+        if scene:
+            for view in scene.views():
+                parent = view.parent()
+                if hasattr(parent, 'delete_connection'):
+                    parent.delete_connection(self)
+                    break
+
 class LadderCanvasItem(QGraphicsItem):
-    """Item no canvas LADDER"""
+    """Item no canvas LADDER com pontos de conexão"""
     
     def __init__(self, component_type, name, description, x=0, y=0):
         super().__init__()
@@ -36,6 +142,12 @@ class LadderCanvasItem(QGraphicsItem):
         self.setFlag(QGraphicsItem.ItemIsSelectable, True)
         self.setFlag(QGraphicsItem.ItemSendsScenePositionChanges, True)
         
+        # PONTOS DE CONEXÃO LADDER - APENAS ENTRADA E SAÍDA
+        self.connection_points = {
+            'input': QPointF(0, self.height / 2),           # Entrada esquerda
+            'output': QPointF(self.width, self.height / 2), # Saída direita
+        }
+        
         # Cores por tipo de componente
         self.colors = {
             'digital_input': QColor(40, 167, 69),    # Verde
@@ -47,6 +159,28 @@ class LadderCanvasItem(QGraphicsItem):
             'comparator': QColor(32, 201, 151),      # Verde água
             'pid': QColor(232, 62, 140)              # Rosa
         }
+        
+    def get_connection_point(self, side):
+        """Retorna ponto de conexão em coordenadas globais"""
+        local_point = self.connection_points[side]
+        return self.mapToScene(local_point)
+        
+    def get_closest_connection_point(self, scene_point):
+        """Retorna o ponto de conexão mais próximo (input ou output)"""
+        input_point = self.mapToScene(self.connection_points['input'])
+        output_point = self.mapToScene(self.connection_points['output'])
+        
+        # Calcular distâncias
+        input_distance = ((input_point.x() - scene_point.x()) ** 2 + 
+                         (input_point.y() - scene_point.y()) ** 2) ** 0.5
+        output_distance = ((output_point.x() - scene_point.x()) ** 2 + 
+                          (output_point.y() - scene_point.y()) ** 2) ** 0.5
+        
+        # Retornar o mais próximo
+        if input_distance < output_distance:
+            return 'input'
+        else:
+            return 'output'
         
     def boundingRect(self):
         """Retorna retângulo delimitador"""
@@ -101,15 +235,21 @@ class LadderCanvasItem(QGraphicsItem):
             desc_rect = QRectF(0, 25, self.width, 30)
             painter.drawText(desc_rect, Qt.AlignCenter | Qt.TextWordWrap, self.description)
         
-        # Pontos de conexão (pequenos círculos)
+        # Pontos de conexão LADDER (pequenos círculos brancos com borda preta)
         painter.setBrush(QBrush(Qt.white))
-        painter.setPen(QPen(Qt.black, 1))
+        painter.setPen(QPen(Qt.black, 2))
         
-        # Entrada (esquerda)
-        painter.drawEllipse(QRectF(-5, self.height/2-3, 6, 6))
-        
-        # Saída (direita)  
-        painter.drawEllipse(QRectF(self.width-1, self.height/2-3, 6, 6))
+        # Desenhar todos os pontos de conexão
+        for side, point in self.connection_points.items():
+            # Círculo pequeno no ponto de conexão
+            painter.drawEllipse(QRectF(point.x()-3, point.y()-3, 6, 6))
+            
+        # Destacar pontos se componente estiver selecionado
+        if self.isSelected():
+            painter.setBrush(QBrush(QColor(0, 120, 212)))
+            painter.setPen(QPen(QColor(0, 120, 212), 2))
+            for side, point in self.connection_points.items():
+                painter.drawEllipse(QRectF(point.x()-4, point.y()-4, 8, 8))
         
     def mousePressEvent(self, event):
         """Evento de clique do mouse"""
@@ -205,27 +345,34 @@ class LadderCanvasItem(QGraphicsItem):
         QMessageBox.information(None, "Copiar", f"Componente {self.name} copiado")
         
     def itemChange(self, change, value):
-        """Aplicar snap to grid quando item for movido"""
+        """Aplicar snap to grid quando item for movido e atualizar conexões"""
         # Use valor numérico da constante ItemPositionChange = 0
         if change == 0 and self.scene():  # ItemPositionChange
             # Obter referência ao canvas para usar o snap to grid
             canvas_widget = None
             if self.scene() and hasattr(self.scene(), 'views'):
                 for view in self.scene().views():
-                    if hasattr(view.parent(), 'snap_to_grid'):
-                        canvas_widget = view.parent()
+                    parent = view.parent()
+                    if hasattr(parent, 'snap_to_grid'):
+                        canvas_widget = parent
                         break
             
             if canvas_widget and hasattr(value, 'x') and hasattr(value, 'y'):
                 # Aplicar snap to grid
                 snap_x, snap_y = canvas_widget.snap_to_grid(value.x(), value.y())
-                return QPointF(snap_x, snap_y)
+                snapped_pos = QPointF(snap_x, snap_y)
                 
+                # Atualizar conexões após movimento
+                if hasattr(canvas_widget, 'update_connections_for_item'):
+                    canvas_widget.update_connections_for_item(self)
+                
+                return snapped_pos
+            
         return super().itemChange(change, value)
 
 
 class LadderCanvas(QWidget):
-    """Canvas principal para edição LADDER com grid automático"""
+    """Canvas principal para edição LADDER com grid automático e conexões"""
     
     component_selected = pyqtSignal(object)  # Emite quando componente é selecionado
     component_added = pyqtSignal(str, str)   # Emite quando componente é adicionado
@@ -248,6 +395,13 @@ class LadderCanvas(QWidget):
         # Controle de posicionamento automático
         self.current_row = 0
         self.current_col = 0
+        
+        # SISTEMA DE CONEXÕES LADDER
+        self.connection_mode = False          # Modo de criação de conexões
+        self.connection_start_item = None     # Item de origem da conexão
+        self.connection_start_point = None    # Ponto de origem
+        self.temp_connection_line = None      # Linha temporária durante criação
+        self.connections = []                 # Lista de todas as conexões
         
         self.init_ui()
         
@@ -277,11 +431,38 @@ class LadderCanvas(QWidget):
         title.setStyleSheet("color: white;")
         title_layout.addWidget(title)
         
+        title_layout.addStretch()
+        
+        # Botão para modo de conexão
+        from PyQt5.QtWidgets import QPushButton
+        self.connection_button = QPushButton("🔗 Conectar")
+        self.connection_button.setCheckable(True)
+        self.connection_button.setFixedSize(100, 30)
+        self.connection_button.setStyleSheet("""
+            QPushButton {
+                background-color: #28a745;
+                color: white;
+                border: none;
+                border-radius: 5px;
+                font-weight: bold;
+            }
+            QPushButton:checked {
+                background-color: #dc3545;
+            }
+            QPushButton:hover {
+                background-color: #218838;
+            }
+            QPushButton:checked:hover {
+                background-color: #c82333;
+            }
+        """)
+        self.connection_button.clicked.connect(self.toggle_connection_mode)
+        title_layout.addWidget(self.connection_button)
+        
         # Informações do canvas
         info_label = QLabel("Arraste componentes da biblioteca para aqui")
         info_label.setFont(QFont("Arial", 9))
         info_label.setStyleSheet("color: #e6f3ff;")
-        title_layout.addStretch()
         title_layout.addWidget(info_label)
         
         layout.addWidget(title_frame)
@@ -308,6 +489,16 @@ class LadderCanvas(QWidget):
         self.graphics_view.dragMoveEvent = self.drag_move_event  
         self.graphics_view.dropEvent = self.drop_event
         
+        # Conectar eventos de mouse para conexões
+        self.graphics_view.mousePressEvent = self.canvas_mouse_press_event
+        
+        # Conectar eventos de teclado para exclusão
+        self.graphics_view.keyPressEvent = self.canvas_key_press_event
+        
+        # Configurar para capturar eventos de teclado
+        self.setFocusPolicy(Qt.StrongFocus)
+        self.graphics_view.setFocusPolicy(Qt.StrongFocus)
+        
         layout.addWidget(self.graphics_view)
         
         # Barra de status do canvas
@@ -323,7 +514,7 @@ class LadderCanvas(QWidget):
         status_layout = QHBoxLayout(status_frame)
         status_layout.setContentsMargins(10, 5, 10, 5)
         
-        self.status_label = QLabel("Pronto - Arraste componentes para começar")
+        self.status_label = QLabel("💡 DICA: Selecione conexões (linhas) e pressione DELETE para excluir")
         self.status_label.setFont(QFont("Arial", 9))
         status_layout.addWidget(self.status_label)
         
@@ -337,6 +528,9 @@ class LadderCanvas(QWidget):
         
         # Conectar sinais
         self.graphics_scene.selectionChanged.connect(self.on_selection_changed)
+        
+        # Conectar eventos de teclado na scene também
+        self.graphics_scene.keyPressEvent = self.scene_key_press_event
         
     def draw_grid(self):
         """Desenha grid LADDER no fundo do canvas com 10 colunas e espaços para conexões"""
@@ -414,6 +608,199 @@ class LadderCanvas(QWidget):
         snap_y = self.CANVAS_MARGIN + row * self.GRID_SPACING_Y
         
         return snap_x, snap_y
+    
+    def toggle_connection_mode(self):
+        """Ativa/desativa modo de conexão"""
+        self.connection_mode = self.connection_button.isChecked()
+        
+        if self.connection_mode:
+            self.connection_button.setText("🔗 Conectando")
+            self.status_label.setText("MODO CONEXÃO: Clique em um componente para iniciar conexão")
+            # Destacar pontos de conexão
+            self.highlight_connection_points(True)
+        else:
+            self.connection_button.setText("🔗 Conectar")  
+            self.status_label.setText("Selecione conexões e pressione DELETE para excluir | Arraste componentes")
+            # Cancelar conexão em andamento
+            self.cancel_current_connection()
+            self.highlight_connection_points(False)
+            
+    def highlight_connection_points(self, highlight):
+        """Destaca/remove destaque dos pontos de conexão"""
+        for item in self.graphics_scene.items():
+            if isinstance(item, LadderCanvasItem):
+                item.update()  # Força redesenho com/sem destaque
+                
+    def cancel_current_connection(self):
+        """Cancela conexão atual"""
+        if self.temp_connection_line:
+            self.graphics_scene.removeItem(self.temp_connection_line)
+            self.temp_connection_line = None
+        self.connection_start_item = None
+        self.connection_start_point = None
+        
+    def create_connection(self, start_item, start_point, end_item, end_point):
+        """Cria uma conexão LADDER entre dois componentes"""
+        start_pos = start_item.get_connection_point(start_point)
+        end_pos = end_item.get_connection_point(end_point)
+        
+        # Criar conexão LADDER em formato L (horizontal + vertical)
+        connection = LadderConnectionLine(start_pos, end_pos)
+        self.graphics_scene.addItem(connection)
+        
+        # Armazenar informações da conexão
+        connection_data = {
+            'line': connection,
+            'start_item': start_item,
+            'start_point': start_point,
+            'end_item': end_item,
+            'end_point': end_point,
+            'type': 'ladder_L'
+        }
+        
+        self.connections.append(connection_data)
+        
+        print(f"🔗 Conexão LADDER criada: {start_item.name}({start_point}) → {end_item.name}({end_point})")
+        return connection
+        
+    def update_connections_for_item(self, item):
+        """Atualiza posições das conexões quando um item se move"""
+        for conn_data in self.connections:
+            if conn_data['start_item'] == item or conn_data['end_item'] == item:
+                # Recalcular posições
+                start_pos = conn_data['start_item'].get_connection_point(conn_data['start_point'])
+                end_pos = conn_data['end_item'].get_connection_point(conn_data['end_point'])
+                
+                # Atualizar caminho da conexão LADDER
+                conn_data['line'].update_path(start_pos, end_pos)
+    
+    def canvas_mouse_press_event(self, event):
+        """Trata cliques no canvas para criar conexões"""
+        if self.connection_mode and event.button() == Qt.LeftButton:
+            # Encontrar item clicado
+            scene_pos = self.graphics_view.mapToScene(event.pos())
+            item = self.graphics_scene.itemAt(scene_pos, self.graphics_view.transform())
+            
+            if isinstance(item, LadderCanvasItem):
+                if self.connection_start_item is None:
+                    # Primeiro clique - iniciar conexão
+                    self.connection_start_item = item
+                    self.connection_start_point = item.get_closest_connection_point(scene_pos)
+                    self.status_label.setText(f"Clique no destino para conectar com {item.name}")
+                    print(f"🔗 Iniciando conexão em {item.name}({self.connection_start_point})")
+                    
+                else:
+                    # Segundo clique - finalizar conexão
+                    if item != self.connection_start_item:
+                        end_point = item.get_closest_connection_point(scene_pos)
+                        
+                        # Criar conexão
+                        self.create_connection(
+                            self.connection_start_item, self.connection_start_point,
+                            item, end_point
+                        )
+                        
+                        self.status_label.setText(f"Conexão criada! Clique em outro componente para nova conexão")
+                    else:
+                        self.status_label.setText("Não é possível conectar um componente a ele mesmo")
+                    
+                    # Reset para nova conexão
+                    self.connection_start_item = None
+                    self.connection_start_point = None
+            else:
+                # Clique no vazio - cancelar conexão atual
+                if self.connection_start_item:
+                    self.connection_start_item = None
+                    self.connection_start_point = None
+                    self.status_label.setText("Conexão cancelada - Clique em um componente para iniciar")
+        else:
+            # Modo normal - comportamento padrão
+            from PyQt5.QtWidgets import QGraphicsView
+            QGraphicsView.mousePressEvent(self.graphics_view, event)
+    
+    def canvas_key_press_event(self, event):
+        """Tratamento de teclas no canvas - incluindo Delete para conexões"""
+        if event.key() == Qt.Key_Delete:
+            self.delete_selected_items()
+        else:
+            # Comportamento padrão para outras teclas
+            from PyQt5.QtWidgets import QGraphicsView
+            QGraphicsView.keyPressEvent(self.graphics_view, event)
+    
+    def scene_key_press_event(self, event):
+        """Tratamento de teclas na scene - incluindo Delete para conexões"""
+        if event.key() == Qt.Key_Delete:
+            self.delete_selected_items()
+        else:
+            # Comportamento padrão para outras teclas
+            from PyQt5.QtWidgets import QGraphicsScene
+            QGraphicsScene.keyPressEvent(self.graphics_scene, event)
+    
+    def keyPressEvent(self, event):
+        """Tratamento de teclas - incluindo Delete para conexões"""
+        if event.key() == Qt.Key_Delete:
+            self.delete_selected_items()
+        else:
+            super().keyPressEvent(event)
+            
+    def delete_selected_items(self):
+        """Exclui itens selecionados (componentes e conexões)"""
+        selected_items = self.graphics_scene.selectedItems()
+        if not selected_items:
+            return
+            
+        deleted_components = 0
+        deleted_connections = 0
+        
+        for item in selected_items:
+            if isinstance(item, LadderCanvasItem):
+                # Excluir componente e suas conexões
+                self.delete_component_and_connections(item)
+                deleted_components += 1
+                
+            elif isinstance(item, LadderConnectionLine):
+                # Excluir apenas a conexão
+                self.delete_connection(item)
+                deleted_connections += 1
+                
+        if deleted_components > 0 or deleted_connections > 0:
+            msg = f"🗑️ Excluídos: {deleted_components} componente(s), {deleted_connections} conexão(ões)"
+            self.status_label.setText(msg)
+            print(msg)
+    
+    def delete_connection(self, connection_line):
+        """Exclui uma conexão específica"""
+        # Encontrar e remover da lista de conexões
+        for i, conn_data in enumerate(self.connections):
+            if conn_data['line'] == connection_line:
+                # Remover da cena
+                self.graphics_scene.removeItem(connection_line)
+                # Remover da lista
+                del self.connections[i]
+                print(f"🗑️ Conexão removida")
+                break
+                
+    def delete_component_and_connections(self, component):
+        """Exclui um componente e todas suas conexões"""
+        # Primeiro, excluir todas as conexões do componente
+        connections_to_remove = []
+        for conn_data in self.connections:
+            if conn_data['start_item'] == component or conn_data['end_item'] == component:
+                connections_to_remove.append(conn_data)
+        
+        # Remover conexões
+        for conn_data in connections_to_remove:
+            self.graphics_scene.removeItem(conn_data['line'])
+            self.connections.remove(conn_data)
+            
+        # Remover componente da cena
+        self.graphics_scene.removeItem(component)
+        
+        # Remover da lista de componentes
+        if component in self.components:
+            self.components.remove(component)
+            
+        print(f"🗑️ Componente {component.name} e suas conexões removidos")
             
     def drag_enter_event(self, event):
         """Evento de entrada do drag"""
